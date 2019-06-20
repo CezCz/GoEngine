@@ -48,10 +48,19 @@ def play_move(game_state, move, color=None):
 
     if is_valid(game_state, move, color):
         do_move(game_state, move, color)
+        check_end_game(game_state)
     else:
         raise IllegalMoveException("Move is not valid")
 
     return game_state
+
+
+__end_game_condition = [PASS, PASS]
+
+
+def check_end_game(game_state):
+    if game_state.moves_history[:-2] == __end_game_condition:
+        game_state.status = GameStatus.ENDED
 
 
 def is_valid(game_state, move, color):
@@ -69,23 +78,22 @@ def is_valid(game_state, move, color):
 
 def is_suicide(game_state, move, color):
     board = game_state.board
-    board[move[X]][move[Y]] = color
+    board[move] = color
     checked = set()
     affected_points = list((move,))
     affected_points.extend(get_neighbour_points(move, board.shape))
     for current_coord in affected_points:
         if current_coord in checked:
             continue
-        x, y = current_coord
-        if board[x][y] != color:
+        if board[current_coord] != color:
             continue
 
-        liberties, group = get_stone_liberty_count(current_coord, board, color)
+        liberties, group = get_stone_liberty_count(board, current_coord, color)
         checked.update(group)
         if liberties == 1:
-            board[move[X]][move[Y]] = EMPTY
+            board[move] = EMPTY
             return False
-    board[move[X]][move[Y]] = EMPTY
+    board[move] = EMPTY
     return True
 
 
@@ -116,14 +124,14 @@ def get_winner(game_state):
 
     for x in range(board_width):
         for y in range(board_length):
-            point = board[x][y]
+            point = board[x, y]
             current_point = (x, y)
             if point == EMPTY:
-                if is_solely_surrounded_by(BLACK, current_point, board):
+                if is_solely_surrounded_by(board, BLACK, current_point):
                     black_count += 1
                 #     Optimization!
                 #     If one empty point is solely surrounded then if it has any empty neighbours they are also solely surrounded!
-                elif is_solely_surrounded_by(WHITE, current_point, board):
+                elif is_solely_surrounded_by(board, WHITE, current_point):
                     white_count += 1
 
     points_difference = abs(black_count - white_count)
@@ -134,15 +142,14 @@ def get_winner(game_state):
     return winner, points_difference
 
 
-def is_solely_surrounded_by(color, point, board):
-    # Tries to find a path, to both opposite color
+def is_solely_surrounded_by(board, color, point):
     checked = {point}
     affected_points = get_neighbour_points(point, board.shape)
     points_to_check = deque(affected_points)
     opposite_color = get_opponent_color(color)
     while points_to_check:
         point_to_check = points_to_check.pop()
-        current_point = board[point_to_check[X]][point_to_check[Y]]
+        current_point = board[point_to_check]
         if point_to_check in checked:
             continue
         if current_point == opposite_color:
@@ -180,17 +187,17 @@ def remove_captured_stones(game_state, move, color):
         if current_coord in checked:
             continue
         x, y = current_coord
-        if board[x][y] != color:
+        if board[x, y] != color:
             continue
 
-        liberties, group = get_stone_liberty_count(current_coord, board, color)
+        liberties, group = get_stone_liberty_count(board, current_coord, color)
         checked.update(group)
         if liberties == 0:
             for coord in group:
-                board[coord[X]][coord[Y]] = EMPTY
+                board[coord] = EMPTY
 
 
-def get_stone_liberty_count(starting_coord, board, color):
+def get_stone_liberty_count(board, starting_coord, color):
     checked = set()
     queue = deque((starting_coord,))
     while queue:
@@ -198,13 +205,16 @@ def get_stone_liberty_count(starting_coord, board, color):
         points = get_neighbour_points(coord, board.shape)
         checked.add(coord)
         for point in points:
-            board_point = board[point[X]][point[Y]]
-            if board_point == EMPTY:
+            board_point = board[point]
+            if EMPTY == board_point:
                 # Short circuit
                 # Only concerned if more than one liberty
                 return 1, checked
-            if point not in checked and board_point == color:
-                queue.append(point)
+            if color != board_point:
+                continue
+            if point in checked:
+                continue
+            queue.append(point)
     return 0, checked
 
 
@@ -231,7 +241,7 @@ def is_within_bounds(coord, board_shape):
 
 
 def is_place_free(game_state, move):
-    return game_state.board[move[X]][move[Y]] == EMPTY or move is PASS
+    return game_state.board[move] == EMPTY or move is PASS
 
 
 def get_opponent_color(color):
@@ -250,7 +260,7 @@ def do_move(game_state, move, color):
 
 def place_stone(game_state, move, color):
     if move is not PASS:
-        game_state.board[move[X]][move[Y]] = color
+        game_state.board[move] = color
 
 
 def undo_move(game_state):
